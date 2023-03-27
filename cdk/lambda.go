@@ -52,7 +52,7 @@ func main() {
 
 	app := awscdk.NewApp(nil)
 
-	NewLambdaStack(app, "LambdaStack", &LambdaStackProps{
+	NewLambdaStack(app, "ChatGPT-Lambda-Stack", &LambdaStackProps{
 		awscdk.StackProps{
 			Env: nil,
 		},
