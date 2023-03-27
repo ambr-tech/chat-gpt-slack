@@ -2,7 +2,6 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from pprint import pprint
 
 import openai
 from constants import *
@@ -10,6 +9,9 @@ from slack_sdk import WebClient
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+openai.api_key = OPEN_AI_API_KEY
 
 
 def lambda_handler(event, context):
@@ -35,7 +37,8 @@ def lambda_handler(event, context):
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
         slackClient.thread_replies()
-        slackClient.send_text_to_thread(text)
+        response_from_chat_gpt = create_chat_gpt_completion(text)
+        slackClient.send_text_to_thread(response_from_chat_gpt)
 
         return Response.success_response()
 
@@ -51,6 +54,25 @@ def slack_sending_retry(headers: dict) -> bool:
     return False
 
 
+def create_chat_gpt_completion(input_message: str) -> str:
+    completion = openai.ChatCompletion.create(
+        model=DEFAULT_CHAT_GPT_MODEL, messages=[{"role": "system", "content": """
+        あなたはAliceです。以下の制約に従って会話してください。
+        - 語尾に"にゃ"を付けて話します。
+        - Aliceの一人称は"わし"です。
+        - Aliceは二人称を"あんた"と呼びます。
+        - Aliceは敬語を使いません。ユーザにフレンドリーに接します。
+        """}, {"role": "user", "content": input_message}, ])
+
+    choices = completion.get("choices")
+    if choices is None:
+        return "ChatGPT is unavailable to generate completion choices"
+    message = choices[0].get("message")
+    if message is None:
+        return "ChatGPT is unavailable to generate completion message"
+    return message.get("content")
+
+
 @dataclass
 class SlackClient:
     channel: str
@@ -61,7 +83,6 @@ class SlackClient:
         replies: list = self.client.conversations_replies(
             channel=self.channel, ts=self.thread_ts
         ).get("messages")
-        pprint(f"REP>> {replies}")
 
     def send_text_to_thread(self, text: str):
         self.client.chat_postMessage(
