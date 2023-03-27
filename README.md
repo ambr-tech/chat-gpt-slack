@@ -1,6 +1,7 @@
 # chat-gpt-slack
 
 このリポジトリはChatGPTとSlackの連携を行うリポジトリです。
+
 `app`配下にはlambda関数があり、`cdk`配下にはAWSのインフラを構築するCDKがあります。
 
 ## Lambdaのビルド
