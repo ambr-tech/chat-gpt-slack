@@ -24,6 +24,22 @@ $ make build-ignore-lib
 
 ## デプロイ
 
+### Credentialの設定
+
+CDKのデプロイ前に、AWS Systems ManagerのパラメータストアにCredentialの設定をする必要があります。
+
+以下コマンドを実行して各Credentialを保存してください。
+
+- `OPEN_AI_API_KEY`
+  - OpenAIのサイトからAPIキーを発行してください。
+- `SLACK_BOT_TOKEN`
+  - SlackAPIのサイトのサイドメニューにある`OAuth & Permissions`から`Bot User OAuth Token`を取得してください。
+
+```sh
+aws ssm put-parameter --name "/chat-gpt-slack/OPEN_AI_API_KEY" --value <OPEN_AI_API_KEY> --type "String"
+aws ssm put-parameter --name "/chat-gpt-slack/SLACK_BOT_TOKEN" --value <SLACK_BOT_TOKEN> --type "String"
+```
+
 以下コマンドを実行することでデプロイできます。
 
 ```sh
