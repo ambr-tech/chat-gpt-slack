@@ -21,9 +21,10 @@ func NewLambdaStack(scope constructs.Construct, id string, props *LambdaStackPro
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
 	lambdaFunction := awslambda.NewFunction(stack, jsii.String("ChatGPT_LambdaFunction"), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PYTHON_3_7(),
-		Code:    awslambda.AssetCode_FromAsset(jsii.String("../app/dist/lambda.zip"), nil),
-		Handler: jsii.String("lambda_function.lambda_handler"),
+		Architecture: awslambda.Architecture_ARM_64(),
+		Runtime:      awslambda.Runtime_PYTHON_3_9(),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String("../app/dist/lambda.zip"), nil),
+		Handler:      jsii.String("lambda_function.lambda_handler"),
 		Environment: &map[string]*string{
 			"OPEN_AI_API_KEY": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/OPEN_AI_API_KEY"), nil),
 			"SLACK_BOT_TOKEN": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/SLACK_BOT_TOKEN"), nil),
