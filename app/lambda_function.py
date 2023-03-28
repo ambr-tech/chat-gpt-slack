@@ -14,12 +14,19 @@ logger.setLevel(logging.INFO)
 
 openai.api_key = constants.OPEN_AI_API_KEY
 
+SLACK_MESSAGE_TYPE_APP_MENTION = "app_mention"
+SLACK_MESSAGE_TYPE_MESSAGE = "message"
+
+SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED = "message_changed"
+
 RE_MENTION_PATTERN = r'<@.*?>\s*'
+
 PROGRESS_MESSAGE = 'Generating... :ultra-fast-parrot:'
 
 
 def lambda_handler(event, context):
     slackClient = None
+    progress_message_ts = None
     try:
         headers = event.get("headers")
 
@@ -33,15 +40,6 @@ def lambda_handler(event, context):
         # if body.get("challenge") is not None:
         #     return Response.success_response(body.get("challenge"))
 
-        # Botによるメッセージ送信だった場合、無視する
-        event_triggered_by_bot = body_event.get("bot_id") is not None
-        if event_triggered_by_bot:
-            return Response.success_response()
-
-        # Botによるメッセージ変更検知送信だった場合、無視する
-        if body_event.get("subtype") == "message_changed" and body_event.get("message").get("bot_id") is not None:
-            return Response.success_response()
-
         text = body_event.get("text")
         channel = body_event.get("channel")
         thread_ts = body_event.get("thread_ts")
@@ -49,6 +47,13 @@ def lambda_handler(event, context):
             thread_ts = body_event.get("ts")
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
+
+        if event_triggered_by_bot(body_event):
+            return Response.success_response()
+        if event_triggered_by_user_message_edit(body_event):
+            slackClient.send_text_to_channel(
+                "一度送信されたメッセージの編集によるChatGPTのレスポンス再生成はサポートしていません")
+            return Response.success_response()
 
         if re.search(RE_MENTION_PATTERN, text):
             text = re.sub(r'<@.*?>\s*', '', text)
@@ -75,6 +80,8 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(e)
         slackClient.send_text_to_channel("予期しないエラーが発生しちゃいました！ :(")
+        if progress_message_ts is not None:
+            slackClient.delete_sent_text(progress_message_ts)
         return Response.unexpected_response("Unexpected error!")
 
 
@@ -174,6 +181,12 @@ class SlackClient:
             ts=ts
         )
 
+    def delete_sent_text(self, ts: str):
+        self.client.chat_delete(
+            channel=self.channel,
+            ts=ts
+        )
+
 
 @dataclass(frozen=True)
 class Response:
@@ -196,3 +209,37 @@ class Response:
     @staticmethod
     def unexpected_response(message: str = '') -> dict:
         return Response(500, {"message": message}).to_response()
+
+
+def event_triggered_by_bot(body_event: dict) -> bool:
+    # Botによるメッセージ送信がトリガーとなったとき
+    bot_id = body_event.get("bot_id")
+    if bot_id is not None:
+        return True
+
+    # Botによるメッセージ変更がトリガーとなったとき
+    subtype = body_event.get("subtype")
+    message = body_event.get("message")
+    bot_id = None
+    if message is not None:
+        bot_id = message.get("bot_id")
+    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED and bot_id is not None:
+        return True
+
+    return False
+
+
+def event_triggered_by_user_message_edit(body_event: dict) -> bool:
+    subtype = body_event.get("subtype")
+    message = body_event.get("message")
+    client_msg_id = None
+    if message is not None:
+        client_msg_id = message.get("client_msg_id")
+    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED and client_msg_id is not None:
+        return True
+
+    edited = body_event.get("edited")
+    if edited is not None:
+        return True
+
+    return False
