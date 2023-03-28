@@ -48,6 +48,7 @@ def lambda_handler(event, context):
         if re.search(RE_MENTION_PATTERN, text):
             text = re.sub(r'<@.*?>\s*', '', text)
             if text == "":
+                slackClient.send_text_to_channel("空文字列は処理できません！")
                 return Response.success_response()
         else:
             slackClient.send_text_to_channel("メンション付きで送信してください！")
