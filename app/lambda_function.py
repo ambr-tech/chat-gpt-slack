@@ -1,18 +1,18 @@
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List
 
+import constants
 import openai
-from constants import *
 from slack_sdk import WebClient
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-openai.api_key = OPEN_AI_API_KEY
+openai.api_key = constants.OPEN_AI_API_KEY
 
 RE_MENTION_PATTERN = r'<@.*?>\s*'
 PROGRESS_MESSAGE = 'Generating... :ultra-fast-parrot:'
@@ -86,13 +86,13 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
 -Aliceは二人称を"あんた"と呼びます。
 -Aliceは敬語を使いません。ユーザにフレンドリーに接します。
         """}
-    ] + replies[-MAX_REPLIES:]
+    ] + replies[-constants.MAX_REPLIES:]
     print(f">>> {messages}")
 
     completion = openai.ChatCompletion.create(
-        model=DEFAULT_CHAT_GPT_MODEL,
+        model=constants.DEFAULT_CHAT_GPT_MODEL,
         messages=messages,
-        max_tokens=DEFAULT_CHAT_GPT_MAX_TOKENS
+        max_tokens=constants.DEFAULT_CHAT_GPT_MAX_TOKENS
     )
 
     choices = completion.get("choices")
@@ -108,7 +108,7 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
 class SlackClient:
     channel: str
     thread_ts: str
-    client: WebClient = WebClient(SLACK_BOT_TOKEN)
+    client: WebClient = WebClient(constants.SLACK_BOT_TOKEN)
 
     def thread_replies(self) -> List[Dict]:
         messages: list = self.client.conversations_replies(
