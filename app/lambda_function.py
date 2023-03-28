@@ -14,6 +14,8 @@ logger.setLevel(logging.INFO)
 
 openai.api_key = OPEN_AI_API_KEY
 
+RE_MENTION_PATTERN = r'<@.*?>\s*'
+
 
 def lambda_handler(event, context):
     slackClient = None
@@ -30,12 +32,27 @@ def lambda_handler(event, context):
         # if body.get("challenge") is not None:
         #     return Response.success_response(body.get("challenge"))
 
+        # Botによるメッセージ送信だった場合、無視する
+        event_triggered_by_bot = body_event.get("bot_id") is not None
+        if event_triggered_by_bot:
+            return Response.success_response()
+
+        text = body_event.get("text")
         channel = body_event.get("channel")
         thread_ts = body_event.get("thread_ts")
         if thread_ts is None:
             thread_ts = body_event.get("ts")
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
+
+        if re.search(RE_MENTION_PATTERN, text):
+            text = re.sub(r'<@.*?>\s*', '', text)
+            if text == "":
+                return Response.success_response()
+        else:
+            slackClient.send_text_to_channel("メンション付きで送信してください！")
+            return Response.success_response()
+
         replies = slackClient.thread_replies()
         response_from_chat_gpt = create_chat_gpt_completion(replies)
         slackClient.send_text_to_thread(response_from_chat_gpt)
@@ -91,6 +108,7 @@ class SlackClient:
             channel=self.channel, ts=self.thread_ts
         ).get("messages")
         texts = []
+
         for message in messages:
             text = message.get("text")
             # If the message belongs to bot
@@ -99,10 +117,12 @@ class SlackClient:
                 continue
 
             # If user is mentioning
-            mention_pattern = r'<@.*?>'
-            if re.search(mention_pattern, text):
-                text = re.sub(r'<@.*?>\s*', '', text)
-                texts.append({"role": "user", "content": text})
+            if re.search(RE_MENTION_PATTERN, text):
+                text = re.sub(RE_MENTION_PATTERN, '', text).strip()
+                if text != "":
+                    texts.append({"role": "user", "content": text})
+
+                continue
 
         return texts
 
