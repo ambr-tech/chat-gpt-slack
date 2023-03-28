@@ -15,6 +15,7 @@ logger.setLevel(logging.INFO)
 openai.api_key = OPEN_AI_API_KEY
 
 RE_MENTION_PATTERN = r'<@.*?>\s*'
+PROGRESS_MESSAGE = 'Generating... :ultra-fast-parrot:'
 
 
 def lambda_handler(event, context):
@@ -54,9 +55,13 @@ def lambda_handler(event, context):
             slackClient.send_text_to_channel("メンション付きで送信してください！")
             return Response.success_response()
 
+        progress_message_ts = slackClient.send_text_to_thread(PROGRESS_MESSAGE)
         replies = slackClient.thread_replies()
         response_from_chat_gpt = create_chat_gpt_completion(replies)
-        slackClient.send_text_to_thread(response_from_chat_gpt)
+        slackClient.update_sent_text(
+            response_from_chat_gpt,
+            progress_message_ts
+        )
 
         return Response.success_response()
 
@@ -82,6 +87,7 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
 -Aliceは敬語を使いません。ユーザにフレンドリーに接します。
         """}
     ] + replies[-MAX_REPLIES:]
+    print(f">>> {messages}")
 
     completion = openai.ChatCompletion.create(
         model=DEFAULT_CHAT_GPT_MODEL,
@@ -112,12 +118,17 @@ class SlackClient:
 
         for message in messages:
             text = message.get("text")
-            # If the message belongs to bot
+
+            # プログレスメッセージは無視する
+            if text == PROGRESS_MESSAGE:
+                continue
+
+            # Botが送信したメッセージの場合
             if message.get("bot_id") is not None:
                 texts.append({"role": "assistant", "content": text})
                 continue
 
-            # If user is mentioning
+            # ユーザがメンション指定している場合
             if re.search(RE_MENTION_PATTERN, text):
                 text = re.sub(RE_MENTION_PATTERN, '', text).strip()
                 if text != "":
@@ -127,17 +138,25 @@ class SlackClient:
 
         return texts
 
-    def send_text_to_thread(self, text: str):
-        self.client.chat_postMessage(
+    def send_text_to_thread(self, text: str) -> str:
+        response = self.client.chat_postMessage(
             text=text,
             channel=self.channel,
             thread_ts=self.thread_ts
         )
+        return response.data.get("ts")
 
     def send_text_to_channel(self, text: str):
         self.client.chat_postMessage(
             text=text,
             channel=self.channel
+        )
+
+    def update_sent_text(self, text: str, ts: str):
+        self.client.chat_update(
+            text=text,
+            channel=self.channel,
+            ts=ts
         )
 
 
