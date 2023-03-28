@@ -38,6 +38,10 @@ def lambda_handler(event, context):
         if event_triggered_by_bot:
             return Response.success_response()
 
+        # Botによるメッセージ変更検知送信だった場合、無視する
+        if body_event.get("subtype") == "message_changed" and body_event.get("message").get("bot_id") is not None:
+            return Response.success_response()
+
         text = body_event.get("text")
         channel = body_event.get("channel")
         thread_ts = body_event.get("thread_ts")
