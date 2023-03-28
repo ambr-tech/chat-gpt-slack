@@ -58,9 +58,12 @@ def lambda_handler(event, context):
         progress_message_ts = slackClient.send_text_to_thread(PROGRESS_MESSAGE)
         replies = slackClient.thread_replies()
         response_from_chat_gpt = create_chat_gpt_completion(replies)
+
+        user_id = body_event.get("user")
         slackClient.update_sent_text(
             response_from_chat_gpt,
-            progress_message_ts
+            progress_message_ts,
+            user_id
         )
 
         return Response.success_response()
@@ -104,6 +107,10 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
     return message.get("content")
 
 
+def remove_mention(text: str) -> str:
+    return re.sub(RE_MENTION_PATTERN, '', text).strip()
+
+
 @dataclass
 class SlackClient:
     channel: str
@@ -125,12 +132,13 @@ class SlackClient:
 
             # Botが送信したメッセージの場合
             if message.get("bot_id") is not None:
+                text = remove_mention(text)
                 texts.append({"role": "assistant", "content": text})
                 continue
 
             # ユーザがメンション指定している場合
             if re.search(RE_MENTION_PATTERN, text):
-                text = re.sub(RE_MENTION_PATTERN, '', text).strip()
+                text = remove_mention(text)
                 if text != "":
                     texts.append({"role": "user", "content": text})
 
@@ -152,7 +160,10 @@ class SlackClient:
             channel=self.channel
         )
 
-    def update_sent_text(self, text: str, ts: str):
+    def update_sent_text(self, text: str, ts: str, user_id: str = None):
+        if user_id:
+            text = f'<@{user_id}>\n{text}'
+
         self.client.chat_update(
             text=text,
             channel=self.channel,
