@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import traceback
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -18,6 +19,8 @@ SLACK_MESSAGE_TYPE_APP_MENTION = "app_mention"
 SLACK_MESSAGE_TYPE_MESSAGE = "message"
 
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED = "message_changed"
+SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED = "message_deleted"
+SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE = "tombstone"
 
 RE_MENTION_PATTERN = r'<@.*?>\s*'
 
@@ -34,7 +37,9 @@ def lambda_handler(event, context):
             return Response.success_response()
 
         body: dict = json.loads(event.get("body"))
-        body_event = body.get("event")
+        body_event: dict = body.get("event")
+
+        logger.info(f"EVENT: {body_event}")
 
         # 初回Slack認証時
         # if body.get("challenge") is not None:
@@ -43,16 +48,21 @@ def lambda_handler(event, context):
         text = body_event.get("text")
         channel = body_event.get("channel")
         thread_ts = body_event.get("thread_ts")
-        if thread_ts is None:
+        if not thread_ts:
             thread_ts = body_event.get("ts")
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
 
+        # Botから送信されたメッセージは無視する
         if event_triggered_by_bot(body_event):
             return Response.success_response()
+        # ユーザが送信されたメッセージを変更したとき
         if event_triggered_by_user_message_edit(body_event):
             slackClient.send_text_to_channel(
-                "一度送信されたメッセージの編集によるChatGPTのレスポンス再生成はサポートしていません")
+                "一度送信されたメッセージの編集によるChatGPTのレスポンス再生成は、今のところサポートしていません")
+            return Response.success_response()
+        # ユーザが送信されたメッセージを削除したとき
+        if event_triggered_by_user_message_delete(body_event):
             return Response.success_response()
 
         if re.search(RE_MENTION_PATTERN, text):
@@ -77,31 +87,25 @@ def lambda_handler(event, context):
 
         return Response.success_response()
 
-    except Exception as e:
-        logger.error(e)
+    except Exception:
+        logger.error(traceback.print_exc())
         slackClient.send_text_to_channel("予期しないエラーが発生しちゃいました！ :(")
-        if progress_message_ts is not None:
+        if progress_message_ts:
             slackClient.delete_sent_text(progress_message_ts)
         return Response.unexpected_response("Unexpected error!")
 
 
 def slack_sending_retry(headers: dict) -> bool:
-    if headers.get("X-Slack-Retry-Num") is not None:
+    if headers.get("X-Slack-Retry-Num"):
         return True
     return False
 
 
 def create_chat_gpt_completion(replies: List[str]) -> str:
     messages = [
-        {"role": "system", "content": """
-あなたはAliceです。以下の制約に従って会話してください。
--語尾に"にゃ"を付けて話します。
--Aliceの一人称は"わし"です。
--Aliceは二人称を"あんた"と呼びます。
--Aliceは敬語を使いません。ユーザにフレンドリーに接します。
-        """}
+        {"role": "system", "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT}
     ] + replies[-constants.MAX_REPLIES:]
-    print(f">>> {messages}")
+    logger.info(f"Messages sent to ChatGPT: {messages}")
 
     completion = openai.ChatCompletion.create(
         model=constants.DEFAULT_CHAT_GPT_MODEL,
@@ -109,13 +113,7 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
         max_tokens=constants.DEFAULT_CHAT_GPT_MAX_TOKENS
     )
 
-    choices = completion.get("choices")
-    if choices is None:
-        return "ChatGPT is unavailable to generate completion choices"
-    message = choices[0].get("message")
-    if message is None:
-        return "ChatGPT is unavailable to generate completion message"
-    return message.get("content")
+    return completion.get("choices")[0].get("message").get("content")
 
 
 def remove_mention(text: str) -> str:
@@ -142,7 +140,7 @@ class SlackClient:
                 continue
 
             # Botが送信したメッセージの場合
-            if message.get("bot_id") is not None:
+            if message.get("bot_id"):
                 text = remove_mention(text)
                 texts.append({"role": "assistant", "content": text})
                 continue
@@ -174,6 +172,9 @@ class SlackClient:
     def update_sent_text(self, text: str, ts: str, user_id: str = None):
         if user_id:
             text = f'<@{user_id}>\n{text}'
+
+        logger.info(f'TEXT: {text}')
+        logger.info(f'TEXT_LENGTH: {len(text)}')
 
         self.client.chat_update(
             text=text,
@@ -214,32 +215,54 @@ class Response:
 def event_triggered_by_bot(body_event: dict) -> bool:
     # Botによるメッセージ送信がトリガーとなったとき
     bot_id = body_event.get("bot_id")
-    if bot_id is not None:
+    if bot_id:
         return True
 
-    # Botによるメッセージ変更がトリガーとなったとき
     subtype = body_event.get("subtype")
-    message = body_event.get("message")
-    bot_id = None
-    if message is not None:
-        bot_id = message.get("bot_id")
-    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED and bot_id is not None:
-        return True
+
+    # Botによるメッセージ変更、削除がトリガーとなったとき
+    if subtype in [
+            SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED,
+            SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED
+    ]:
+        message = body_event.get("message")
+        if message:
+            bot_id = message.get("bot_id")
+            if bot_id:
+                return True
 
     return False
 
 
 def event_triggered_by_user_message_edit(body_event: dict) -> bool:
     subtype = body_event.get("subtype")
-    message = body_event.get("message")
-    client_msg_id = None
-    if message is not None:
-        client_msg_id = message.get("client_msg_id")
-    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED and client_msg_id is not None:
-        return True
 
-    edited = body_event.get("edited")
-    if edited is not None:
-        return True
+    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED:
+        message = body_event.get("message")
+        if message:
+            client_msg_id = message.get("client_msg_id")
+            if client_msg_id:
+                return True
+
+    return False
+
+
+def event_triggered_by_user_message_delete(body_event: dict) -> bool:
+    subtype = body_event.get("subtype")
+
+    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED:
+        previous_message = body_event.get("previous_message")
+        if previous_message:
+            client_msg_id = previous_message.get("client_msg_id")
+            if client_msg_id:
+                return True
+
+    # メッセージが削除された後に、削除したメッセージがSlackBotの投稿に変わってイベントが発生してしまう
+    if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED:
+        message = body_event.get("message")
+        if message:
+            message_subtype = message.get("subtype")
+            if message_subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE:
+                return True
 
     return False
