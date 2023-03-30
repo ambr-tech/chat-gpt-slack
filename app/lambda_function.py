@@ -3,7 +3,7 @@ import logging
 import re
 import traceback
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import constants
 import openai
@@ -25,6 +25,10 @@ SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE = "tombstone"
 RE_MENTION_PATTERN = r'<@.*?>\s*'
 
 PROGRESS_MESSAGE = 'Generating... :ultra-fast-parrot:'
+
+
+class UnexpectedError(Exception):
+    pass
 
 
 def lambda_handler(event, context):
@@ -49,36 +53,53 @@ def lambda_handler(event, context):
         channel = body_event.get("channel")
         thread_ts = body_event.get("thread_ts")
         if not thread_ts:
-            thread_ts = body_event.get("ts")
+            message = body_event.get("message")
+            if message:
+                thread_ts = message.get("thread_ts")
+            else:
+                thread_ts = body_event.get("ts")
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
 
         # DMでBotから送信されたメッセージは無視する
         if event_triggered_by_bot(body_event):
             return Response.success_response()
-        # DMでユーザがメッセージを変更したとき
-        if event_triggered_by_user_message_edit(body_event):
-            slackClient.send_text_to_channel(
-                "一度送信されたメッセージの編集によるChatGPTのレスポンス再生成は、今のところサポートしていません")
-            return Response.success_response()
         # DMでユーザがメッセージを削除したとき
-        if event_triggered_by_user_message_delete(body_event):
+        if event_triggered_by_user_message_delete_on_dm(body_event):
             return Response.success_response()
 
-        if re.search(RE_MENTION_PATTERN, text):
-            text = re.sub(r'<@.*?>\s*', '', text)
-            if text == "":
-                slackClient.send_text_to_channel("空文字列は処理できません！")
+        updated_text = None
+        # DMでユーザがメッセージを変更したとき
+        if event_triggered_by_user_message_edit_on_dm(body_event):
+            updated_text = body_event.get("message").get("text")
+        # チャンネルでユーザがメッセージを変更したとき
+        if event_triggered_by_user_message_edit_on_channel(body_event):
+            updated_text = body_event.get("text")
+
+        if text:
+            sent, text = slackClient.send_error_when_text_is_empty_or_no_mention(
+                text
+            )
+            if sent:
+                return Response.success_response()
+        elif updated_text:
+            sent, updated_text = slackClient.send_error_when_text_is_empty_or_no_mention(
+                updated_text
+            )
+            if sent:
                 return Response.success_response()
         else:
-            slackClient.send_text_to_channel("メンション付きで送信してください！")
-            return Response.success_response()
+            raise UnexpectedError("Cannot get text nor updated_text")
 
         progress_message_ts = slackClient.send_text_to_thread(PROGRESS_MESSAGE)
-        replies = slackClient.thread_replies()
+        replies = slackClient.thread_replies(updated_text)
         response_from_chat_gpt = create_chat_gpt_completion(replies)
 
         user_id = body_event.get("user")
+        if not user_id:
+            message = body_event.get("message")
+            if message:
+                user_id = message.get("user")
         slackClient.update_sent_text(
             response_from_chat_gpt,
             progress_message_ts,
@@ -116,7 +137,17 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
     return completion.get("choices")[0].get("message").get("content")
 
 
+def mention_matches(text: str) -> bool:
+    if not text:
+        return False
+
+    return re.search(RE_MENTION_PATTERN, text)
+
+
 def remove_mention(text: str) -> str:
+    if not text:
+        return ""
+
     return re.sub(RE_MENTION_PATTERN, '', text).strip()
 
 
@@ -125,12 +156,18 @@ class SlackClient:
     channel: str
     thread_ts: str
     client: WebClient = WebClient(constants.SLACK_BOT_TOKEN)
+    thread_messages = []
 
-    def thread_replies(self) -> List[Dict]:
+    def _append_assistant_role(self, text: str) -> dict:
+        return self.thread_messages.append({"role": "assistant", "content": text})
+
+    def _append_user_role(self, text: str) -> dict:
+        return self.thread_messages.append({"role": "user", "content": text})
+
+    def thread_replies(self, updated_text: str) -> List[Dict]:
         messages: list = self.client.conversations_replies(
             channel=self.channel, ts=self.thread_ts
         ).get("messages")
-        texts = []
         logger.info(f'THREAD REPLIES: {messages}')
 
         for message in messages:
@@ -143,18 +180,22 @@ class SlackClient:
             # Botが送信したメッセージの場合
             if message.get("bot_id"):
                 text = remove_mention(text)
-                texts.append({"role": "assistant", "content": text})
+                self._append_assistant_role(text)
                 continue
 
             # ユーザがメンション指定している場合
-            if re.search(RE_MENTION_PATTERN, text):
+            if mention_matches(text):
                 text = remove_mention(text)
                 if text != "":
-                    texts.append({"role": "user", "content": text})
+                    self._append_user_role(text)
 
                 continue
 
-        return texts
+        # ユーザがメッセージを変更したとき、最新のメッセージとして扱う
+        if updated_text:
+            self._append_user_role(updated_text)
+
+        return self.thread_messages
 
     def send_text_to_thread(self, text: str) -> str:
         response = self.client.chat_postMessage(
@@ -188,6 +229,18 @@ class SlackClient:
             channel=self.channel,
             ts=ts
         )
+
+    def send_error_when_text_is_empty_or_no_mention(self, text: str) -> Tuple[bool, str]:
+        if mention_matches(text):
+            text = remove_mention(text)
+            if text == "":
+                self.send_text_to_channel("空文字は処理できません！")
+                return True, None
+        else:
+            self.send_text_to_channel("メンション付きで送信してください")
+            return True, None
+
+        return False, text
 
 
 @dataclass(frozen=True)
@@ -235,7 +288,7 @@ def event_triggered_by_bot(body_event: dict) -> bool:
     return False
 
 
-def event_triggered_by_user_message_edit(body_event: dict) -> bool:
+def event_triggered_by_user_message_edit_on_dm(body_event: dict) -> bool:
     subtype = body_event.get("subtype")
 
     if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED:
@@ -248,7 +301,7 @@ def event_triggered_by_user_message_edit(body_event: dict) -> bool:
     return False
 
 
-def event_triggered_by_user_message_delete(body_event: dict) -> bool:
+def event_triggered_by_user_message_delete_on_dm(body_event: dict) -> bool:
     subtype = body_event.get("subtype")
 
     if subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED:
@@ -265,5 +318,15 @@ def event_triggered_by_user_message_delete(body_event: dict) -> bool:
             message_subtype = message.get("subtype")
             if message_subtype == SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE:
                 return True
+
+    return False
+
+
+def event_triggered_by_user_message_edit_on_channel(body_event: dict) -> bool:
+    client_msg_id = body_event.get("client_msg_id")
+    if client_msg_id:
+        edited = body_event.get("edited")
+        if edited:
+            return True
 
     return False
