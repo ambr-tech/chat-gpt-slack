@@ -4,6 +4,14 @@
 
 `app`配下にはlambda関数があり、`cdk`配下にはAWSのインフラを構築するCDKがあります。
 
+## LambdaのLintを走らせる
+
+[Ruff](https://github.com/charliermarsh/ruff)を利用している。
+
+```sh
+$ make lint-lambda
+```
+
 ## Lambdaのビルド
 
 > **Note**
@@ -39,6 +47,8 @@ CDKのデプロイ前に、AWS Systems ManagerのパラメータストアにCred
 aws ssm put-parameter --name "/chat-gpt-slack/OPEN_AI_API_KEY" --value <OPEN_AI_API_KEY> --type "String"
 aws ssm put-parameter --name "/chat-gpt-slack/SLACK_BOT_TOKEN" --value <SLACK_BOT_TOKEN> --type "String"
 ```
+
+### AWSへのデプロイ
 
 以下コマンドを実行することでデプロイできます。
 
