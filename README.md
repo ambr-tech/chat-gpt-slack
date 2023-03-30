@@ -4,9 +4,9 @@
 
 `app`配下にはlambda関数があり、`cdk`配下にはAWSのインフラを構築するCDKがあります。
 
-## LambdaのLintを走らせる
+## Lint
 
-[Ruff](https://github.com/charliermarsh/ruff)を利用している。
+[Ruff](https://github.com/charliermarsh/ruff)を利用してPythonコードをチェックする。
 
 ```sh
 $ make lint-lambda
