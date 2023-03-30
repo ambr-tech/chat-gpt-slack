@@ -2,3 +2,4 @@ dist
 package
 .python-version
 venv
+*.pyc
