@@ -53,15 +53,15 @@ def lambda_handler(event, context):
 
         slackClient = SlackClient(channel=channel, thread_ts=thread_ts)
 
-        # Botから送信されたメッセージは無視する
+        # DMでBotから送信されたメッセージは無視する
         if event_triggered_by_bot(body_event):
             return Response.success_response()
-        # ユーザが送信されたメッセージを変更したとき
+        # DMでユーザがメッセージを変更したとき
         if event_triggered_by_user_message_edit(body_event):
             slackClient.send_text_to_channel(
                 "一度送信されたメッセージの編集によるChatGPTのレスポンス再生成は、今のところサポートしていません")
             return Response.success_response()
-        # ユーザが送信されたメッセージを削除したとき
+        # DMでユーザがメッセージを削除したとき
         if event_triggered_by_user_message_delete(body_event):
             return Response.success_response()
 
@@ -131,6 +131,7 @@ class SlackClient:
             channel=self.channel, ts=self.thread_ts
         ).get("messages")
         texts = []
+        logger.info(f'THREAD REPLIES: {messages}')
 
         for message in messages:
             text = message.get("text")
