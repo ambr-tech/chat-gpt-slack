@@ -123,9 +123,12 @@ def slack_sending_retry(headers: dict) -> bool:
 
 
 def create_chat_gpt_completion(replies: List[str]) -> str:
-    messages = [
-        {"role": "system", "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT}
-    ] + replies[-constants.MAX_REPLIES:]
+    messages = []
+    if constants.CHAT_GPT_SYSTEM_ROLE_CONTENT != "":
+        messages.append(
+            {"role": "system", "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT}
+        )
+    messages.extend(replies[-constants.MAX_REPLIES:])
     logger.info(f"Messages sent to ChatGPT: {messages}")
 
     completion = openai.ChatCompletion.create(
