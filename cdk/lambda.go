@@ -26,8 +26,9 @@ func NewLambdaStack(scope constructs.Construct, id string, props *LambdaStackPro
 		Code:         awslambda.AssetCode_FromAsset(jsii.String("../app/dist/lambda.zip"), nil),
 		Handler:      jsii.String("lambda_function.lambda_handler"),
 		Environment: &map[string]*string{
-			"OPEN_AI_API_KEY": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/OPEN_AI_API_KEY"), nil),
-			"SLACK_BOT_TOKEN": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/SLACK_BOT_TOKEN"), nil),
+			"OPEN_AI_API_KEY":      awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/OPEN_AI_API_KEY"), nil),
+			"SLACK_BOT_TOKEN":      awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/SLACK_BOT_TOKEN"), nil),
+			"SLACK_SIGNING_SECRET": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String("/chat-gpt-slack/SLACK_SIGNING_SECRET"), nil),
 		},
 		MemorySize: jsii.Number(256),
 		Timeout:    awscdk.Duration_Minutes(jsii.Number(2)),
