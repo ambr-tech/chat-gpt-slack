@@ -159,7 +159,11 @@ class SlackClient:
     channel: str
     thread_ts: str
     client: WebClient = WebClient(constants.SLACK_BOT_TOKEN)
-    thread_messages = []
+    thread_messages: list = None
+
+    def __post_init__(self):
+        if self.thread_messages is None:
+            self.thread_messages = []
 
     def _append_assistant_role(self, text: str) -> dict:
         return self.thread_messages.append({"role": "assistant", "content": text})
@@ -200,7 +204,10 @@ class SlackClient:
 
         return self.thread_messages
 
-    def send_text_to_thread(self, text: str) -> str:
+    def send_text_to_thread(self, text: str, user_id: str = None) -> str:
+        if user_id:
+            text = f'<@{user_id}>\n{text}'
+
         response = self.client.chat_postMessage(
             text=text,
             channel=self.channel,
@@ -220,6 +227,24 @@ class SlackClient:
 
         logger.info(f'TEXT: {text}')
         logger.info(f'TEXT_LENGTH: {len(text)}')
+
+        # TODO
+        # text_length = len(text)
+        # if text_length > 2000:
+        #     first_text = text[:2000]
+        #     self.client.chat_update(
+        #         text=first_text,
+        #         channel=self.channel,
+        #         ts=ts
+        #     )
+        #     remain_text = text[2000:]
+        #     self.send_text_to_thread(remain_text, user_id)
+        # else:
+        #     self.client.chat_update(
+        #         text=text,
+        #         channel=self.channel,
+        #         ts=ts
+        #     )
 
         self.client.chat_update(
             text=text,
