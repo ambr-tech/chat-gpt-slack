@@ -42,10 +42,13 @@ CDKのデプロイ前に、AWS Systems ManagerのパラメータストアにCred
   - OpenAIのサイトからAPIキーを発行してください。
 - `SLACK_BOT_TOKEN`
   - SlackAPIのサイトのサイドメニューにある`OAuth & Permissions`から`Bot User OAuth Token`を取得してください。
+- `SLACK_SIGNING_SECRET`
+  - SlackAPIのサイトのサイドメニューにある`Basic Information`から`AppCredentials`にある`Signing Secret`を取得してください。
 
 ```sh
 aws ssm put-parameter --name "/chat-gpt-slack/OPEN_AI_API_KEY" --value <OPEN_AI_API_KEY> --type "String"
 aws ssm put-parameter --name "/chat-gpt-slack/SLACK_BOT_TOKEN" --value <SLACK_BOT_TOKEN> --type "String"
+aws ssm put-parameter --name "/chat-gpt-slack/SLACK_SIGNING_SECRET" --value <SLACK_SIGNING_SECRET> --type "String"
 ```
 
 ### AWSへのデプロイ

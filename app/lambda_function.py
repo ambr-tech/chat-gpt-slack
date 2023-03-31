@@ -1,6 +1,9 @@
+import hashlib
+import hmac
 import json
 import logging
 import re
+import time
 import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
@@ -40,7 +43,11 @@ def lambda_handler(event, context):
         if slack_sending_retry(headers):
             return Response.success_response()
 
-        body: dict = json.loads(event.get("body"))
+        body = event.get("body")
+        if not has_valid_signature(headers, body):
+            return Response.unauthorized_response()
+
+        body: dict = json.loads(body)
         body_event: dict = body.get("event")
 
         logger.info(f"EVENT: {body_event}")
@@ -120,6 +127,27 @@ def slack_sending_retry(headers: dict) -> bool:
     if headers.get("X-Slack-Retry-Num"):
         return True
     return False
+
+
+def has_valid_signature(headers: dict, body: dict) -> bool:
+    timestamp = headers.get("X-Slack-Request-Timestamp")
+    signature = headers.get("X-Slack-Signature")
+    if not timestamp or not signature:
+        return False
+
+    time_diff = int(time.time()) - int(timestamp)
+    if time_diff > 60 * 5:
+        return False
+
+    request_body_sig = "v0=" + hmac.new(
+        constants.SLACK_SIGNING_SECRET,
+        f'v0:{timestamp}:{body}'.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    if signature != request_body_sig:
+        return False
+
+    return True
 
 
 def create_chat_gpt_completion(replies: List[str]) -> str:
@@ -288,6 +316,10 @@ class Response:
     @staticmethod
     def success_response(message: str = '') -> dict:
         return Response(200, {"message": message}).to_response()
+
+    @staticmethod
+    def unauthorized_response(message: str = '') -> dict:
+        return Response(401, {"message": message}).to_response()
 
     @staticmethod
     def unexpected_response(message: str = '') -> dict:
