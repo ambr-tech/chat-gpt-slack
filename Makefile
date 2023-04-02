@@ -8,6 +8,10 @@ help: ## Show help message
 lint-lambda: ## Lint lambda
 	ruff app/*.py
 
+.PHONY: lint-fix-lambda
+lint-fix-lambda: ## Lint fix lambda
+	ruff app/*.py --fix
+
 .PHONY: build
 build: ## Build lambda function
 	cd app && mkdir -p package dist && rm -rf package/* && cp *.py package/ && pip install -r requirements.txt -t ./package/ && cd ./package/ && zip -r ../dist/lambda.zip .
