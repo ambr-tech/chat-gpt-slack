@@ -1,19 +1,17 @@
 import hashlib
 import hmac
 import json
-import logging
-import re
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import List
 
 import constants
 import openai
-from slack_sdk import WebClient
+import utils
+from slack_client import SlackClient
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = utils.setup_logger(__name__)
 
 
 openai.api_key = constants.OPEN_AI_API_KEY
@@ -24,10 +22,6 @@ SLACK_MESSAGE_TYPE_MESSAGE = "message"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED = "message_changed"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED = "message_deleted"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE = "tombstone"
-
-RE_MENTION_PATTERN = r'<@.*?>\s*'
-
-PROGRESS_MESSAGE = 'Generating... :ultra-fast-parrot:'
 
 
 class UnexpectedError(Exception):
@@ -85,20 +79,20 @@ def lambda_handler(event, context):
 
         if text:
             sent, text = slackClient.send_error_when_text_is_empty_or_no_mention(
-                text
-            )
+                text)
             if sent:
                 return Response.success_response()
         elif updated_text:
             sent, updated_text = slackClient.send_error_when_text_is_empty_or_no_mention(
-                updated_text
-            )
+                updated_text)
             if sent:
                 return Response.success_response()
         else:
             raise UnexpectedError("Cannot get text nor updated_text")
 
-        progress_message_ts = slackClient.send_text_to_thread(PROGRESS_MESSAGE)
+        progress_message_ts = slackClient.send_text_to_thread(
+            constants.SLACK_PROGRESS_MESSAGE
+        )
         replies = slackClient.thread_replies(updated_text)
         response_from_chat_gpt = create_chat_gpt_completion(replies)
 
@@ -154,7 +148,10 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
     messages = []
     if constants.CHAT_GPT_SYSTEM_ROLE_CONTENT != "":
         messages.append(
-            {"role": "system", "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT}
+            {
+                "role": "system",
+                "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT,
+            }
         )
     messages.extend(replies[-constants.MAX_REPLIES:])
     logger.info(f"Messages sent to ChatGPT: {messages}")
@@ -166,137 +163,6 @@ def create_chat_gpt_completion(replies: List[str]) -> str:
     )
 
     return completion.get("choices")[0].get("message").get("content")
-
-
-def mention_matches(text: str) -> bool:
-    if not text:
-        return False
-
-    return re.search(RE_MENTION_PATTERN, text)
-
-
-def remove_mention(text: str) -> str:
-    if not text:
-        return ""
-
-    return re.sub(RE_MENTION_PATTERN, '', text).strip()
-
-
-@dataclass
-class SlackClient:
-    channel: str
-    thread_ts: str
-    client: WebClient = WebClient(constants.SLACK_BOT_TOKEN)
-    thread_messages: list = None
-
-    def __post_init__(self):
-        if self.thread_messages is None:
-            self.thread_messages = []
-
-    def _append_assistant_role(self, text: str) -> dict:
-        return self.thread_messages.append({"role": "assistant", "content": text})
-
-    def _append_user_role(self, text: str) -> dict:
-        return self.thread_messages.append({"role": "user", "content": text})
-
-    def thread_replies(self, updated_text: str) -> List[Dict]:
-        messages: list = self.client.conversations_replies(
-            channel=self.channel, ts=self.thread_ts
-        ).get("messages")
-        logger.info(f'THREAD REPLIES: {messages}')
-
-        for message in messages:
-            text = message.get("text")
-
-            # プログレスメッセージは無視する
-            if text == PROGRESS_MESSAGE:
-                continue
-
-            # Botが送信したメッセージの場合
-            if message.get("bot_id"):
-                text = remove_mention(text)
-                self._append_assistant_role(text)
-                continue
-
-            # ユーザがメンション指定している場合
-            if mention_matches(text):
-                text = remove_mention(text)
-                if text != "":
-                    self._append_user_role(text)
-
-                continue
-
-        # ユーザがメッセージを変更したとき、最新のメッセージとして扱う
-        if updated_text:
-            self._append_user_role(updated_text)
-
-        return self.thread_messages
-
-    def send_text_to_thread(self, text: str, user_id: str = None) -> str:
-        if user_id:
-            text = f'<@{user_id}>\n{text}'
-
-        response = self.client.chat_postMessage(
-            text=text,
-            channel=self.channel,
-            thread_ts=self.thread_ts
-        )
-        return response.data.get("ts")
-
-    def send_text_to_channel(self, text: str):
-        self.client.chat_postMessage(
-            text=text,
-            channel=self.channel
-        )
-
-    def update_sent_text(self, text: str, ts: str, user_id: str = None):
-        if user_id:
-            text = f'<@{user_id}>\n{text}'
-
-        logger.info(f'TEXT: {text}')
-        logger.info(f'TEXT_LENGTH: {len(text)}')
-
-        # TODO
-        # text_length = len(text)
-        # if text_length > 2000:
-        #     first_text = text[:2000]
-        #     self.client.chat_update(
-        #         text=first_text,
-        #         channel=self.channel,
-        #         ts=ts
-        #     )
-        #     remain_text = text[2000:]
-        #     self.send_text_to_thread(remain_text, user_id)
-        # else:
-        #     self.client.chat_update(
-        #         text=text,
-        #         channel=self.channel,
-        #         ts=ts
-        #     )
-
-        self.client.chat_update(
-            text=text,
-            channel=self.channel,
-            ts=ts
-        )
-
-    def delete_sent_text(self, ts: str):
-        self.client.chat_delete(
-            channel=self.channel,
-            ts=ts
-        )
-
-    def send_error_when_text_is_empty_or_no_mention(self, text: str) -> Tuple[bool, str]:
-        if mention_matches(text):
-            text = remove_mention(text)
-            if text == "":
-                self.send_text_to_channel("空文字は処理できません！")
-                return True, None
-        else:
-            self.send_text_to_channel("メンション付きで送信してください")
-            return True, None
-
-        return False, text
 
 
 @dataclass(frozen=True)
