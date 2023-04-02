@@ -63,33 +63,35 @@ def lambda_handler(event, context):
         if event_triggered_by_user_message_delete_on_dm(body_event):
             return Response.success()
 
-        updated_text = None
+        user_edited_message = False
         # DMでユーザがメッセージを変更したとき
         if event_triggered_by_user_message_edit_on_dm(body_event):
-            updated_text = body_event.get("message").get("text")
+            text = body_event.get("message").get("text")
+            user_edited_message = True
         # チャンネルでユーザがメッセージを変更したとき
         if event_triggered_by_user_message_edit_on_channel(body_event):
-            updated_text = body_event.get("text")
+            text = body_event.get("text")
+            user_edited_message = True
 
-        if text:
-            sent, text = slackClient.send_error_when_text_is_empty_or_no_mention(
-                text)
-            if sent:
-                return Response.success()
-        elif updated_text:
-            sent, updated_text = slackClient.send_error_when_text_is_empty_or_no_mention(
-                updated_text)
-            if sent:
-                return Response.success()
-        else:
-            raise UnexpectedError("Cannot get text nor updated_text")
+        if not text:
+            raise UnexpectedError("Cannot get text")
+
+        sent, text = slackClient.send_error_when_text_is_empty_or_no_mention(
+            text)
+        if sent:
+            return Response.success()
 
         progress_message_ts = slackClient.send_text_to_thread(
             constants.SLACK_PROGRESS_MESSAGE
         )
-        replies = slackClient.thread_replies(updated_text)
+        replies = None
+        if user_edited_message:
+            replies = slackClient.thread_replies(text)
+        else:
+            replies = slackClient.thread_replies()
         response_from_chat_gpt = chat_gpt_client.create_chat_gpt_completion(
-            replies)
+            replies
+        )
 
         user_id = body_event.get("user")
         if not user_id:

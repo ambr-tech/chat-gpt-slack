@@ -26,7 +26,7 @@ class SlackClient:
     def _append_user_role(self, text: str) -> dict:
         return self.thread_messages.append({"role": "user", "content": text})
 
-    def thread_replies(self, updated_text: str) -> List[Dict]:
+    def thread_replies(self, updated_text: str = None) -> List[Dict]:
         messages: list = self.client.conversations_replies(
             channel=self.channel, ts=self.thread_ts
         ).get("messages")
