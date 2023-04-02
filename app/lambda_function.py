@@ -1,20 +1,14 @@
-import hashlib
-import hmac
 import json
-import time
 import traceback
-from dataclasses import dataclass
-from typing import List
 
+import chat_gpt_client
 import constants
-import openai
 import utils
+from response import Response
 from slack_client import SlackClient
 
 logger = utils.setup_logger(__name__)
 
-
-openai.api_key = constants.OPEN_AI_API_KEY
 
 SLACK_MESSAGE_TYPE_APP_MENTION = "app_mention"
 SLACK_MESSAGE_TYPE_MESSAGE = "message"
@@ -34,12 +28,12 @@ def lambda_handler(event, context):
     try:
         headers = event.get("headers")
 
-        if slack_sending_retry(headers):
-            return Response.success_response()
+        if utils.slack_sending_retry(headers):
+            return Response.success()
 
         body = event.get("body")
-        if not has_valid_signature(headers, body):
-            return Response.unauthorized_response()
+        if not utils.has_valid_signature(headers, body):
+            return Response.unauthorized()
 
         body: dict = json.loads(body)
         body_event: dict = body.get("event")
@@ -48,7 +42,7 @@ def lambda_handler(event, context):
 
         # 初回Slack認証時
         # if body.get("challenge") is not None:
-        #     return Response.success_response(body.get("challenge"))
+        #     return Response.success(body.get("challenge"))
 
         text = body_event.get("text")
         channel = body_event.get("channel")
@@ -64,10 +58,10 @@ def lambda_handler(event, context):
 
         # DMでBotから送信されたメッセージは無視する
         if event_triggered_by_bot(body_event):
-            return Response.success_response()
+            return Response.success()
         # DMでユーザがメッセージを削除したとき
         if event_triggered_by_user_message_delete_on_dm(body_event):
-            return Response.success_response()
+            return Response.success()
 
         updated_text = None
         # DMでユーザがメッセージを変更したとき
@@ -81,12 +75,12 @@ def lambda_handler(event, context):
             sent, text = slackClient.send_error_when_text_is_empty_or_no_mention(
                 text)
             if sent:
-                return Response.success_response()
+                return Response.success()
         elif updated_text:
             sent, updated_text = slackClient.send_error_when_text_is_empty_or_no_mention(
                 updated_text)
             if sent:
-                return Response.success_response()
+                return Response.success()
         else:
             raise UnexpectedError("Cannot get text nor updated_text")
 
@@ -94,7 +88,8 @@ def lambda_handler(event, context):
             constants.SLACK_PROGRESS_MESSAGE
         )
         replies = slackClient.thread_replies(updated_text)
-        response_from_chat_gpt = create_chat_gpt_completion(replies)
+        response_from_chat_gpt = chat_gpt_client.create_chat_gpt_completion(
+            replies)
 
         user_id = body_event.get("user")
         if not user_id:
@@ -107,89 +102,14 @@ def lambda_handler(event, context):
             user_id
         )
 
-        return Response.success_response()
+        return Response.success()
 
     except Exception:
         logger.error(traceback.print_exc())
         slackClient.send_text_to_channel("予期しないエラーが発生しちゃいました！ :(")
         if progress_message_ts:
             slackClient.delete_sent_text(progress_message_ts)
-        return Response.unexpected_response("Unexpected error!")
-
-
-def slack_sending_retry(headers: dict) -> bool:
-    if headers.get("X-Slack-Retry-Num"):
-        return True
-    return False
-
-
-def has_valid_signature(headers: dict, body: dict) -> bool:
-    timestamp = headers.get("X-Slack-Request-Timestamp")
-    signature = headers.get("X-Slack-Signature")
-    if not timestamp or not signature:
-        return False
-
-    time_diff = int(time.time()) - int(timestamp)
-    if time_diff > 60 * 5:
-        return False
-
-    request_body_sig = "v0=" + hmac.new(
-        constants.SLACK_SIGNING_SECRET,
-        f'v0:{timestamp}:{body}'.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    if signature != request_body_sig:
-        return False
-
-    return True
-
-
-def create_chat_gpt_completion(replies: List[str]) -> str:
-    messages = []
-    if constants.CHAT_GPT_SYSTEM_ROLE_CONTENT != "":
-        messages.append(
-            {
-                "role": "system",
-                "content": constants.CHAT_GPT_SYSTEM_ROLE_CONTENT,
-            }
-        )
-    messages.extend(replies[-constants.MAX_REPLIES:])
-    logger.info(f"Messages sent to ChatGPT: {messages}")
-
-    completion = openai.ChatCompletion.create(
-        model=constants.DEFAULT_CHAT_GPT_MODEL,
-        messages=messages,
-        max_tokens=constants.DEFAULT_CHAT_GPT_MAX_TOKENS
-    )
-
-    return completion.get("choices")[0].get("message").get("content")
-
-
-@dataclass(frozen=True)
-class Response:
-    status_code: int
-    body: dict
-
-    def to_response(self) -> dict:
-        return {
-            "headers": {
-                "Content-Type": "application/json",
-            },
-            "statusCode": self.status_code,
-            "body": json.dumps(self.body)
-        }
-
-    @staticmethod
-    def success_response(message: str = '') -> dict:
-        return Response(200, {"message": message}).to_response()
-
-    @staticmethod
-    def unauthorized_response(message: str = '') -> dict:
-        return Response(401, {"message": message}).to_response()
-
-    @staticmethod
-    def unexpected_response(message: str = '') -> dict:
-        return Response(500, {"message": message}).to_response()
+        return Response.unexpected("Unexpected error!")
 
 
 def event_triggered_by_bot(body_event: dict) -> bool:
