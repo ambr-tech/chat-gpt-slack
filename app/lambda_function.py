@@ -4,6 +4,9 @@ import traceback
 import chat_gpt_client
 import constants
 import utils
+from command_list import ListCommand
+from command_set import SetCommand
+from errors import NotImplementedCommandError, UnexpectedError
 from response import Response
 from slack_client import SlackClient
 
@@ -16,10 +19,6 @@ SLACK_MESSAGE_TYPE_MESSAGE = "message"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_CHANGED = "message_changed"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_DELETED = "message_deleted"
 SLACK_MESSAGE_SUB_TYPE_MESSAGE_TOMBSTONE = "tombstone"
-
-
-class UnexpectedError(Exception):
-    pass
 
 
 def lambda_handler(event, context):
@@ -81,6 +80,37 @@ def lambda_handler(event, context):
         if sent:
             return Response.success()
 
+        user_id = body_event.get("user")
+        if not user_id:
+            message = body_event.get("message")
+            if message:
+                user_id = message.get("user")
+
+        # 設定セットコマンドの場合
+        if utils.is_set_command(text):
+            result, message = utils.validate_set_command(text)
+            if not result:
+                slackClient.send_text_to_channel(message)
+                return Response.success()
+
+            set_command = SetCommand(text, user_id)
+            set_command.set_key_value()
+            slackClient.send_text_to_channel(
+                f"SET {set_command.key}: {set_command.value}"
+            )
+            return Response.success()
+        # 設定リストコマンドの場合
+        elif utils.is_list_command(text):
+            result, message = utils.validate_list_command(text)
+            if not result:
+                slackClient.send_text_to_channel(message)
+                return Response.success()
+
+            list_command = ListCommand(text, user_id)
+            message = list_command.list_key_value()
+            slackClient.send_text_to_channel(message)
+            return Response.success()
+
         progress_message_ts = slackClient.send_text_to_thread(
             constants.SLACK_PROGRESS_MESSAGE
         )
@@ -90,20 +120,21 @@ def lambda_handler(event, context):
         else:
             replies = slackClient.thread_replies()
         response_from_chat_gpt = chat_gpt_client.create_chat_gpt_completion(
-            replies
+            replies,
+            user_id
         )
 
-        user_id = body_event.get("user")
-        if not user_id:
-            message = body_event.get("message")
-            if message:
-                user_id = message.get("user")
         slackClient.update_sent_text(
             response_from_chat_gpt,
             progress_message_ts,
             user_id
         )
 
+        return Response.success()
+
+    except NotImplementedCommandError as e:
+        logger.error(traceback.print_exc())
+        slackClient.send_text_to_channel(str(e))
         return Response.success()
 
     except Exception:
