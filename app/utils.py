@@ -3,6 +3,7 @@ import hmac
 import logging
 import re
 import time
+from typing import Tuple
 
 import constants
 
@@ -63,3 +64,33 @@ def has_valid_signature(headers: dict, body: dict) -> bool:
         return False
 
     return True
+
+
+def is_set_command(text: str):
+    if text == "set" or text.startswith("set "):
+        return True
+
+    return False
+
+
+def is_list_command(text: str):
+    if text == "list" or text.startswith("list "):
+        return True
+
+    return False
+
+
+def validate_set_command(text: str) -> Tuple[bool, str]:
+    split_text = text.split(" ", 2)
+    if len(split_text) < 3:
+        return False, "キーまたは設定する値を指定してください。\n設定可能なキーはsystem_role_contentです。"
+
+    return True, None
+
+
+def validate_list_command(text: str):
+    split_text = text.split(" ", 1)
+    if len(split_text) < 2:
+        return False, "キーを指定してください。\n参照可能なキーはuser_configです。"
+
+    return True, None
