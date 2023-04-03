@@ -1,5 +1,6 @@
 import os
 
+USER_CONFIG_TABLE = os.environ.get("USER_CONFIG_TABLE")
 OPEN_AI_API_KEY = os.environ.get("OPEN_AI_API_KEY")
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET").encode()
