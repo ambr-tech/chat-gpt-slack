@@ -5,8 +5,8 @@ from errors import NotImplementedCommandError
 class SetCommand:
     def __init__(self, text: str, user_id: str) -> None:
         split_text = text.split(" ", 2)
-        self.key = split_text[1]
-        self.value = split_text[2]
+        self.key = split_text[1].strip()
+        self.value = split_text[2].strip()
         self.user_id = user_id
         self.db_client = DynamoDBClient()
 

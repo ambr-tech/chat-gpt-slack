@@ -5,7 +5,7 @@ from errors import NotImplementedCommandError
 class ListCommand:
     def __init__(self, text: str, user_id: str) -> None:
         split_text = text.split(" ", 1)
-        self.key = split_text[1]
+        self.key = split_text[1].strip()
         self.user_id = user_id
         self.db_client = DynamoDBClient()
 
