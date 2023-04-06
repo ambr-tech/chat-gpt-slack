@@ -7,7 +7,7 @@ import utils
 from command_clear import ClearCommand
 from command_list import ListCommand
 from command_set import SetCommand
-from errors import NotImplementedCommandError, UnexpectedError
+from errors import CommandParseError, NotImplementedCommandError, UnexpectedError
 from response import Response
 from slack_client import SlackClient
 
@@ -87,36 +87,22 @@ def lambda_handler(event, context):
             if message:
                 user_id = message.get("user")
 
-        # 設定セットコマンドの場合
-        if utils.is_set_command(text):
-            result, message = utils.validate_set_command(text)
-            if not result:
-                slackClient.send_text_to_channel(message)
-                return Response.success()
-
+        # セットコマンドの場合
+        if utils.is_command("set", text):
             set_command = SetCommand(text, user_id)
             set_command.set_key_value()
             slackClient.send_text_to_channel(
                 f"SET {set_command.key}: {set_command.value}"
             )
             return Response.success()
-        # 設定リストコマンドの場合
-        elif utils.is_list_command(text):
-            result, message = utils.validate_list_command(text)
-            if not result:
-                slackClient.send_text_to_channel(message)
-                return Response.success()
-
+        # リストコマンドの場合
+        elif utils.is_command("list", text):
             list_command = ListCommand(text, user_id)
             message = list_command.list_key_value()
             slackClient.send_text_to_channel(message)
             return Response.success()
-        elif utils.is_clear_command(text):
-            result, message = utils.validate_clear_command(text)
-            if not result:
-                slackClient.send_text_to_channel(message)
-                return Response.success()
-
+        # 削除コマンド
+        elif utils.is_command("clear", text):
             clear_command = ClearCommand(text, user_id)
             clear_command.clear_value()
             slackClient.send_text_to_channel(
@@ -143,6 +129,11 @@ def lambda_handler(event, context):
             user_id
         )
 
+        return Response.success()
+
+    except CommandParseError as e:
+        logger.error(traceback.print_exc())
+        slackClient.send_text_to_channel(str(e))
         return Response.success()
 
     except NotImplementedCommandError as e:
@@ -221,4 +212,5 @@ def event_triggered_by_user_message_edit_on_channel(body_event: dict) -> bool:
         if edited:
             return True
 
+    return False
     return False

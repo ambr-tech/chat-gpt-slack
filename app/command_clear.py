@@ -1,10 +1,16 @@
 from dynamo_db_client import DynamoDBClient, UserConfigItem
-from errors import NotImplementedCommandError
+from errors import CommandParseError, NotImplementedCommandError
+
+available_clear_command_keys = ["system_role_content"]
 
 
 class ClearCommand:
     def __init__(self, text: str, user_id: str) -> None:
         split_text = text.split(" ", 1)
+        if len(split_text) < 2:
+            raise CommandParseError(
+                f"キーを指定してください。\n使用可能なキーは{','.join(available_clear_command_keys)}です。"
+            )
         self.key = split_text[1].strip()
         self.user_id = user_id
         self.db_client = DynamoDBClient()
