@@ -1,10 +1,17 @@
 from dynamo_db_client import DynamoDBClient, UserConfigItem
-from errors import NotImplementedCommandError
+from errors import CommandParseError, NotImplementedCommandError
+
+available_set_command_keys = ["system_role_content"]
 
 
 class SetCommand:
-    def __init__(self, text: str, user_id: str) -> None:
+    def __init__(self, text: str, user_id: str):
         split_text = text.split(" ", 2)
+        if len(split_text) < 3:
+            raise CommandParseError(
+                f"キーまたは設定する値を指定してください。\n使用可能なキーは{','.join(available_set_command_keys)}です。"
+            )
+
         self.key = split_text[1].strip()
         self.value = split_text[2].strip()
         self.user_id = user_id
@@ -15,7 +22,7 @@ class SetCommand:
             self._put_system_role_content()
         else:
             raise NotImplementedCommandError(
-                f'setコマンドで{self.key}のキーは存在しません\n設定可能なキーはsystem_role_contentです。'
+                f"setコマンドで{self.key}のキーは使用できません\n使用可能なキーは{','.join(available_set_command_keys)}です。"
             )
 
     def _put_system_role_content(self):

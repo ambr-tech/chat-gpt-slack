@@ -1,10 +1,16 @@
 from dynamo_db_client import DynamoDBClient, UserConfigItem
-from errors import NotImplementedCommandError
+from errors import CommandParseError, NotImplementedCommandError
+
+available_list_command_keys = ["user_config"]
 
 
 class ListCommand:
-    def __init__(self, text: str, user_id: str) -> None:
+    def __init__(self, text: str, user_id: str):
         split_text = text.split(" ", 1)
+        if len(split_text) < 2:
+            raise CommandParseError(
+                f"キーを指定してください。\n使用可能なキーは{','.join(available_list_command_keys)}です。"
+            )
         self.key = split_text[1].strip()
         self.user_id = user_id
         self.db_client = DynamoDBClient()
@@ -20,7 +26,7 @@ class ListCommand:
 
         else:
             raise NotImplementedCommandError(
-                f'listコマンドで{self.key}のキーは存在しません\n参照可能なキーはuser_configです。'
+                f"listコマンドで{self.key}のキーは存在しません\n参照可能なキーは{','.join(available_list_command_keys)}です。"
             )
 
         return message

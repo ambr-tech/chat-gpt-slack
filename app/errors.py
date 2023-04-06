@@ -5,3 +5,7 @@ class NotImplementedCommandError(Exception):
 
 class UnexpectedError(Exception):
     pass
+
+
+class CommandParseError(Exception):
+    pass
