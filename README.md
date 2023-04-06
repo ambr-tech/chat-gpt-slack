@@ -56,6 +56,7 @@ aws ssm put-parameter --name "/chat-gpt-slack/SLACK_SIGNING_SECRET" --value <SLA
 以下コマンドを実行することでデプロイできます。
 
 ```sh
+$ pwd
 /Users/xxx/Desktop/work/chat-gpt-slack
 
 $ AWS_PROFILE=<your_profile> make deploy
