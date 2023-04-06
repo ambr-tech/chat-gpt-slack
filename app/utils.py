@@ -80,6 +80,13 @@ def is_list_command(text: str):
     return False
 
 
+def is_clear_command(text: str):
+    if text == "clear" or text.startswith("clear "):
+        return True
+
+    return False
+
+
 def validate_set_command(text: str) -> Tuple[bool, str]:
     split_text = text.split(" ", 2)
     if len(split_text) < 3:
@@ -92,5 +99,13 @@ def validate_list_command(text: str):
     split_text = text.split(" ", 1)
     if len(split_text) < 2:
         return False, "キーを指定してください。\n参照可能なキーはuser_configです。"
+
+    return True, None
+
+
+def validate_clear_command(text: str):
+    split_text = text.split(" ", 1)
+    if len(split_text) < 2:
+        return False, "キーを指定してください。\n削除可能なキーはsystem_role_contentです。"
 
     return True, None
