@@ -4,6 +4,7 @@ import traceback
 import chat_gpt_client
 import constants
 import utils
+from command_clear import ClearCommand
 from command_list import ListCommand
 from command_set import SetCommand
 from errors import NotImplementedCommandError, UnexpectedError
@@ -109,6 +110,18 @@ def lambda_handler(event, context):
             list_command = ListCommand(text, user_id)
             message = list_command.list_key_value()
             slackClient.send_text_to_channel(message)
+            return Response.success()
+        elif utils.is_clear_command(text):
+            result, message = utils.validate_clear_command(text)
+            if not result:
+                slackClient.send_text_to_channel(message)
+                return Response.success()
+
+            clear_command = ClearCommand(text, user_id)
+            clear_command.clear_value()
+            slackClient.send_text_to_channel(
+                f"CLEAR {clear_command.key}"
+            )
             return Response.success()
 
         progress_message_ts = slackClient.send_text_to_thread(
