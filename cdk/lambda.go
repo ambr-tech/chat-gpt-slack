@@ -43,7 +43,7 @@ func NewLambdaStack(scope constructs.Construct, id string, props *LambdaStackPro
 			"USER_CONFIG_TABLE":    user_config_table.TableName(),
 		},
 		MemorySize: jsii.Number(256),
-		Timeout:    awscdk.Duration_Minutes(jsii.Number(2)),
+		Timeout:    awscdk.Duration_Minutes(jsii.Number(10)),
 	})
 	user_config_table.GrantReadWriteData(lambdaFunction)
 
