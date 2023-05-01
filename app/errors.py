@@ -9,3 +9,7 @@ class UnexpectedError(Exception):
 
 class CommandParseError(Exception):
     pass
+
+
+class OpenAIError(Exception):
+    pass

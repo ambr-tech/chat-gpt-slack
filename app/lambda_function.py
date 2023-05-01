@@ -7,7 +7,8 @@ import utils
 from command_clear import ClearCommand
 from command_list import ListCommand
 from command_set import SetCommand
-from errors import CommandParseError, NotImplementedCommandError, UnexpectedError
+from errors import (CommandParseError, NotImplementedCommandError, OpenAIError,
+                    UnexpectedError)
 from response import Response
 from slack_client import SlackClient
 
@@ -137,6 +138,11 @@ def lambda_handler(event, context):
         return Response.success()
 
     except NotImplementedCommandError as e:
+        logger.error(traceback.print_exc())
+        slackClient.send_text_to_channel(str(e))
+        return Response.success()
+
+    except OpenAIError as e:
         logger.error(traceback.print_exc())
         slackClient.send_text_to_channel(str(e))
         return Response.success()
