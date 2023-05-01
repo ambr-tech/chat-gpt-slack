@@ -3,6 +3,7 @@ import hmac
 import logging
 import re
 import time
+from typing import Tuple
 
 import constants
 
@@ -69,3 +70,16 @@ def is_command(command_name: str, text: str):
     if text == command_name or text.startswith(f'{command_name} '):
         return True
     return False
+
+
+def separate_text_with_chunk_size(text: str, chunk_size: int) -> Tuple[str, str]:
+    encoded_text = text.encode('utf-8')
+    encoded_text_length = len(encoded_text)
+    end_position = min(chunk_size, encoded_text_length)
+    while end_position < encoded_text_length and encoded_text[end_position] & 0xC0 == 0x80:
+        end_position -= 1
+
+    first_chunk = encoded_text[:end_position].decode('utf-8')
+    remain_chunk = encoded_text[end_position:].decode('utf-8')
+
+    return first_chunk, remain_chunk
