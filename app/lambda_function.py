@@ -145,6 +145,8 @@ def lambda_handler(event, context):
     except OpenAIError as e:
         logger.error(traceback.print_exc())
         slackClient.send_text_to_channel(str(e))
+        if progress_message_ts:
+            slackClient.delete_sent_text(progress_message_ts)
         return Response.success()
 
     except Exception:
