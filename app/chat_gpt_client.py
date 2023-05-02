@@ -42,9 +42,9 @@ def create_chat_gpt_completion(replies: List[str], user_id: str) -> str:
             messages=messages,
             max_tokens=constants.DEFAULT_CHAT_GPT_MAX_TOKENS
         )
-    except RateLimitError as e:
+    except RateLimitError:
         raise OpenAIError("レートリミットに達しました。しばらく待ってから再度お試しください。")
-    except ServiceUnavailableError as e:
+    except ServiceUnavailableError:
         raise OpenAIError("サービスが一時的に利用できません。しばらく待ってから再度お試しください。")
 
     return completion.get("choices")[0].get("message").get("content")
