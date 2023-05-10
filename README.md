@@ -1,5 +1,7 @@
 # chat-gpt-slack
 
+[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B37611%2Fchat-gpt-slack.svg?type=small)](https://app.fossa.com/projects/custom%2B37611%2Fchat-gpt-slack?ref=badge_small)
+
 このリポジトリはChatGPTとSlackの連携を行うリポジトリです。
 
 `app`配下にはlambda関数があり、`cdk`配下にはAWSのインフラを構築するCDKがあります。
@@ -61,3 +63,9 @@ $ pwd
 
 $ AWS_PROFILE=<your_profile> make deploy
 ```
+
+## LICENSE
+
+This project is licensed under the MIT License.
+
+[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B37611%2Fchat-gpt-slack.svg?type=large)](https://app.fossa.com/projects/custom%2B37611%2Fchat-gpt-slack?ref=badge_large)
