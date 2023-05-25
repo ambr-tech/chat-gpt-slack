@@ -76,25 +76,6 @@ class SlackClient:
             channel=self.channel
         )
 
-    def update_sent_text(self, text: str, ts: str, user_id: str = None):
-        if user_id:
-            text = f'<@{user_id}>\n{text}'
-
-        logger.info(f'TEXT: {text}')
-        logger.info(f'TEXT_LENGTH: {len(text)}')
-
-        first_text, remain_text = utils.separate_text_with_chunk_size(
-            text,
-            constants.SLACK_MAX_EDIT_BYTE_SIZE
-        )
-        self.client.chat_update(
-            text=first_text,
-            channel=self.channel,
-            ts=ts
-        )
-        if remain_text:
-            self.send_text_to_thread(remain_text, user_id)
-
     def delete_sent_text(self, ts: str):
         self.client.chat_delete(
             channel=self.channel,

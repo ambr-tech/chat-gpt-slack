@@ -124,11 +124,8 @@ def lambda_handler(event, context):
             user_id
         )
 
-        slackClient.update_sent_text(
-            response_from_chat_gpt,
-            progress_message_ts,
-            user_id
-        )
+        slackClient.delete_sent_text(progress_message_ts)
+        slackClient.send_text_to_thread(response_from_chat_gpt, user_id)
 
         return Response.success()
 
@@ -174,6 +171,18 @@ def event_triggered_by_bot(body_event: dict) -> bool:
         if message:
             bot_id = message.get("bot_id")
             if bot_id:
+                return True
+        previous_message = body_event.get("previous_message")
+        if previous_message:
+            bot_id = previous_message.get("bot_id")
+            if bot_id:
+                return True
+
+        # DMの場合、Botのメッセージを削除から追加すると、送信元であるユーザーのメッセージ変更が発火されてしまう
+        if message and previous_message:
+            current_text = message.get("text")
+            previous_text = previous_message.get("text")
+            if current_text == previous_text:
                 return True
 
     return False
