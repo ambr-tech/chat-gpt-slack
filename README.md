@@ -2,6 +2,8 @@
 
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B37611%2Fchat-gpt-slack.svg?type=small)](https://app.fossa.com/projects/custom%2B37611%2Fchat-gpt-slack?ref=badge_small)
 
+[English README](./README_EN.md)
+
 このリポジトリはChatGPTとSlackの連携を行うリポジトリです。
 
 `app`配下にはlambda関数があり、`cdk`配下にはAWSのインフラを構築するCDKがあります。
