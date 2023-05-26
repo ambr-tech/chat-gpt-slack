@@ -66,4 +66,5 @@ $ AWS_PROFILE=<your_profile> make deploy
 ## LICENSE
 
 This project is licensed under the MIT License.
+
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B37611%2Fchat-gpt-slack.svg?type=large)](https://app.fossa.com/projects/custom%2B37611%2Fchat-gpt-slack?ref=badge_large)
